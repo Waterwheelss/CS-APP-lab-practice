@@ -132,7 +132,6 @@ NOTES:
  *      the correct answers.
  */
 
-
 #endif
 //1
 /* 
@@ -142,7 +141,8 @@ NOTES:
  *   Max ops: 14
  *   Rating: 1
  */
-int bitXor(int x, int y) {
+int bitXor(int x, int y)
+{
   return ~(~(~x & y) & ~(x & ~y));
 }
 /* 
@@ -151,9 +151,9 @@ int bitXor(int x, int y) {
  *   Max ops: 4
  *   Rating: 1
  */
-int tmin(void) {
+int tmin(void)
+{
   return 1 << 31;
-
 }
 //2
 /*
@@ -163,10 +163,13 @@ int tmin(void) {
  *   Max ops: 10
  *   Rating: 1
  */
-int isTmax(int x) {
-  int Tmin = (1 << 31);
-  int Tmax = ~(Tmin);
-  return x == Tmax;
+int isTmax(int x)
+{
+  // int Tmin = (1 << 31);
+  // int Tmax = ~(Tmin);
+  // return x == Tmax;
+
+  return !!(x + 1) & !((x + 1) ^ ~x);
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -176,8 +179,11 @@ int isTmax(int x) {
  *   Max ops: 12
  *   Rating: 2
  */
-int allOddBits(int x) {
-  return 2;
+int allOddBits(int x)
+{
+  int mask = (0xAA << 24) | (0xAA << 16) | (0xAA << 8) | (0xAA);
+  int result = x & mask;
+  return !(result ^ mask);
 }
 /* 
  * negate - return -x 
@@ -186,8 +192,9 @@ int allOddBits(int x) {
  *   Max ops: 5
  *   Rating: 2
  */
-int negate(int x) {
-  return 2;
+int negate(int x)
+{
+  return (~x) + 1;
 }
 //3
 /* 
@@ -199,7 +206,15 @@ int negate(int x) {
  *   Max ops: 15
  *   Rating: 3
  */
-int isAsciiDigit(int x) {
+int isAsciiDigit(int x)
+{
+  int zero = 0x30;
+  int nine = 0x39;
+  int digit = zero + x;
+
+  //Check if is negative;
+  int greaterThanZero = 0;
+
   return 2;
 }
 /* 
@@ -209,8 +224,9 @@ int isAsciiDigit(int x) {
  *   Max ops: 16
  *   Rating: 3
  */
-int conditional(int x, int y, int z) {
-  return 2;
+int conditional(int x, int y, int z)
+{
+  return ((~!!x + 1) & y) | ((~!x + 1) & z);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -219,8 +235,18 @@ int conditional(int x, int y, int z) {
  *   Max ops: 24
  *   Rating: 3
  */
-int isLessOrEqual(int x, int y) {
-  return 2;
+int isLessOrEqual(int x, int y)
+{
+  //Check if the same sign.
+
+  //right shift 31 bit, if is positive then return 0, otherwise return 1;
+  int signX = (x >> 31) & 1;
+  int signY = (y >> 31) & 1;
+
+  //This flag will be 1 only if x is negative and y is positive.
+  int flag1 = (signX & (signY ^ 1));
+  int flag2 = (signX ^ signY ^ 1) & ((x + ~y) >> 31) & 1;
+  return flag1 | flag2;
 }
 //4
 /* 
@@ -231,8 +257,12 @@ int isLessOrEqual(int x, int y) {
  *   Max ops: 12
  *   Rating: 4 
  */
-int logicalNeg(int x) {
-  return 2;
+int logicalNeg(int x)
+{
+  int negativeNum = (~x + 1);
+  int sign = (x >> 31) & 1;
+  int negativeSign = (negativeNum >> 31) & 1;
+  return (~sign & ~negativeSign) & 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -246,8 +276,29 @@ int logicalNeg(int x) {
  *  Max ops: 90
  *  Rating: 4
  */
-int howManyBits(int x) {
-  return 0;
+int howManyBits(int x)
+{
+  int b16, b8, b4, b2, b1;
+  x = (x >> 31) ^ x; //Clear the sign bit.
+
+  b16 = (!!(x >> 16) << 4); //Check if 23 ~ 31 bits contain any 1, if so, use ! op to convert into 1 and left shift for 4 bits, which become 16 in decimal. (Means at it need at least 16 bit to represent.)
+  x = x >> b16;             //If b16 has value (which means it need at least 16 bits to represent.), then right shift x b16 bit, otherwise, x remain the same.
+
+  //keep doing this search, kind of like binary search.
+
+  b8 = (!!(x >> 8) << 3);
+  x = x >> b8;
+
+  b4 = (!!(x >> 4) << 2);
+  x = x >> b4;
+
+  b2 = (!!(x >> 2) << 1);
+  x = x >> b2;
+
+  b1 = (!!(x >> 1));
+  x = x >> b1;
+
+  return b16 + b8 + b4 + b2 + b1 + x + 1; //plus one sign bit.
 }
 //float
 /* 
@@ -261,8 +312,41 @@ int howManyBits(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatScale2(unsigned uf) {
-  return 2;
+unsigned floatScale2(unsigned uf)
+{
+  int sign = (uf & (1 << 31));
+  int exp = (uf & 0x7f800000);
+  int frac = (uf & 0x007fffff);
+
+  //Special case (infinity, NaN);
+  if(exp == 0x7f800000){
+    return sign | uf;
+  }
+
+  //Denormalized
+  if (exp == 0)
+  {
+    //Check if it will become normalized if we *2.
+    if ((frac >> 22) & 1)
+    {
+      //if true
+      exp = (1 << 23);
+      frac = (frac << 1) & 0x007fffff;
+    }
+    else
+    {
+      //if false.
+      frac = (frac << 1);
+    }
+    return sign | exp | frac;
+  }
+
+  //Normalized.
+  if (exp != 0 && exp != 0x7f800000){
+    exp = exp + ( 1 << 23 );
+  }
+
+  return sign | exp | frac;
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -276,7 +360,8 @@ unsigned floatScale2(unsigned uf) {
  *   Max ops: 30
  *   Rating: 4
  */
-int floatFloat2Int(unsigned uf) {
+int floatFloat2Int(unsigned uf)
+{
   return 2;
 }
 /* 
@@ -292,6 +377,7 @@ int floatFloat2Int(unsigned uf) {
  *   Max ops: 30 
  *   Rating: 4
  */
-unsigned floatPower2(int x) {
-    return 2;
+unsigned floatPower2(int x)
+{
+  return 2;
 }
